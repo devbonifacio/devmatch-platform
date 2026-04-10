@@ -32,16 +32,16 @@ export const setupSocket = (io) => {
     io.emit('user:online', { userId });
 
     // Join a chat room for a specific match
-    // Client calls this when opening a conversation
     socket.on('chat:join', (matchId) => {
-      socket.join(matchId);
-      console.log(`User ${userId} joined room ${matchId}`);
+      socket.join(String(matchId));
+      console.log(`JOIN ROOM: ${String(matchId)} | user: ${userId}`);
     });
 
     // Handle new message sent via socket
     socket.on('chat:message', async (message) => {
       try {
-        io.to(message.matchId).emit('chat:message', message);
+        console.log('SOCKET MESSAGE:', message);
+        socket.to(String(message.matchId)).emit('chat:message', message);
       } catch (error) {
         socket.emit('chat:error', { message: 'Failed to broadcast message.' });
       }
@@ -49,12 +49,12 @@ export const setupSocket = (io) => {
 
     // Handle typing indicator
     socket.on('chat:typing', ({ matchId, isTyping }) => {
-      socket.to(matchId).emit('chat:typing', { userId, isTyping });
+      socket.to(String(matchId)).emit('chat:typing', { userId, isTyping });
     });
 
     // Leave a room
     socket.on('chat:leave', (matchId) => {
-      socket.leave(matchId);
+      socket.leave(String(matchId));
     });
 
     // Handle disconnect

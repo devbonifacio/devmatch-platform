@@ -8,21 +8,21 @@ const router = express.Router();
 // POST /api/matches/like/:targetId — like a dev
 router.post('/like/:targetId', protect, async (req, res) => {
   try {
-    const me = await User.findById(req.user._id);
+    const myId = req.user._id.toString();
     const targetId = req.params.targetId;
 
     // Add target to my liked list (avoid duplicates with $addToSet)
-    await User.findByIdAndUpdate(me._id, { $addToSet: { liked: targetId } });
+    await User.findByIdAndUpdate(myId, { $addToSet: { liked: targetId } });
 
-    // Check if target has already liked me — if yes, it's a MATCH!
-    const target = await User.findById(targetId);
-    const isMatch = target.liked.includes(me._id);
+    // Check if target has already liked me
+    // IMPORTANT: compare as strings — ObjectId.includes() uses ref equality and always fails
+    const target = await User.findById(targetId).lean();
+    const isMatch = target.liked.map((id) => id.toString()).includes(myId);
 
     if (isMatch) {
       // Sort IDs so the pair is always in the same order (prevents duplicate matches)
-      const sortedIds = [me._id.toString(), targetId].sort();
+      const sortedIds = [myId, targetId].sort();
 
-      // Create match document (upsert to prevent duplicates)
       const match = await Match.findOneAndUpdate(
         { users: sortedIds },
         { users: sortedIds },
@@ -34,6 +34,7 @@ router.post('/like/:targetId', protect, async (req, res) => {
 
     res.json({ matched: false });
   } catch (error) {
+    console.error('Like error:', error);
     res.status(500).json({ message: 'Failed to process like.' });
   }
 });
@@ -53,13 +54,11 @@ router.post('/skip/:targetId', protect, async (req, res) => {
 // GET /api/matches — get all my matches
 router.get('/', protect, async (req, res) => {
   try {
-    // Find all matches that include my ID
     const matches = await Match.find({ users: req.user._id }).populate(
       'users',
       'name avatar bio stack github isOnline lastSeen'
     );
 
-    // For each match, return the OTHER user's info (not mine)
     const formattedMatches = matches.map((match) => {
       const otherUser = match.users.find(
         (u) => u._id.toString() !== req.user._id.toString()

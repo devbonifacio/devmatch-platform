@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema(
     stack: {
       type: [String],
       default: [],
+      validate: {
+        validator: (v) => v.length <= 20,
+        message: 'Stack cannot exceed 20 technologies.',
+      },
     },
     // What kind of projects the dev is looking for
     lookingFor: {

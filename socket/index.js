@@ -1,4 +1,3 @@
-import Message from '../models/Message.js';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 
@@ -49,7 +48,11 @@ export const setupSocket = (io) => {
 
     // Handle typing indicator
     socket.on('chat:typing', ({ matchId, isTyping }) => {
-      socket.to(String(matchId)).emit('chat:typing', { userId, isTyping });
+      try {
+        socket.to(String(matchId)).emit('chat:typing', { userId, isTyping });
+      } catch (error) {
+        console.error('Typing indicator error:', error);
+      }
     });
 
     // Leave a room

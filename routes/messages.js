@@ -1,12 +1,17 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import Match from '../models/Match.js';
 import protect from '../middleware/auth.js';
+import { rateLimitMessages } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
 // GET /api/messages/:matchId — get all messages for a match
 router.get('/:matchId', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.matchId)) {
+    return res.status(400).json({ message: 'Invalid match ID.' });
+  }
   try {
     // Verify this user is part of the match
     const match = await Match.findById(req.params.matchId);
@@ -36,7 +41,10 @@ router.get('/:matchId', protect, async (req, res) => {
 });
 
 // POST /api/messages/:matchId — send a message (fallback if socket fails)
-router.post('/:matchId', protect, async (req, res) => {
+router.post('/:matchId', protect, rateLimitMessages, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.matchId)) {
+    return res.status(400).json({ message: 'Invalid match ID.' });
+  }
   try {
     const { text } = req.body;
     if (!text?.trim()) {
@@ -45,6 +53,13 @@ router.post('/:matchId', protect, async (req, res) => {
 
     const match = await Match.findById(req.params.matchId);
     if (!match) return res.status(404).json({ message: 'Match not found.' });
+
+    const isParticipant = match.users.some(
+      (u) => u.toString() === req.user._id.toString()
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'Not authorized.' });
+    }
 
     const message = await Message.create({
       matchId: req.params.matchId,

@@ -41,6 +41,9 @@ router.post('/register', async (req, res) => {
       },
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Email already registered.' });
+    }
     res.status(500).json({ message: 'Server error during registration.' });
   }
 });

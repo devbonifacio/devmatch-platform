@@ -27,4 +27,7 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Fast lookup of all messages in a match, ordered by time
+messageSchema.index({ matchId: 1, createdAt: 1 });
+
 export default mongoose.model('Message', messageSchema);

@@ -2,13 +2,18 @@ import mongoose from 'mongoose';
 
 const matchSchema = new mongoose.Schema(
   {
-    // The two users who matched — always stored sorted so we don't have duplicates
-    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
+    users: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
+      validate: {
+        validator: (v) => v.length === 2,
+        message: 'A match must have exactly 2 users.',
+      },
+    },
   },
   { timestamps: true }
 );
 
-// Ensure we never have duplicate match documents for the same pair
-matchSchema.index({ users: 1 }, { unique: true });
+// Index for fast lookups
+matchSchema.index({ users: 1 });
 
 export default mongoose.model('Match', matchSchema);

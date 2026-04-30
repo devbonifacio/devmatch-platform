@@ -39,6 +39,7 @@ export const setupSocket = (io) => {
     // Handle new message sent via socket
     socket.on('chat:message', async (message) => {
       try {
+        if (!message || !message.matchId) return;
         console.log('SOCKET MESSAGE:', message);
         socket.to(String(message.matchId)).emit('chat:message', message);
       } catch (error) {

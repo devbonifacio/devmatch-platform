@@ -35,7 +35,7 @@ router.get('/discover', protect, async (req, res) => {
     const devs = await User.find({
       _id: { $nin: excludeIds },
     })
-      .select('-password')
+      .select('-password -liked -skipped')
       .limit(20); // Get 20 devs at a time
 
       res.json({ users: devs });

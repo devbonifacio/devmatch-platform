@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import matchRoutes from './routes/matches.js';
-import messageRoutes from './routes/messages.js';
+import createMessageRouter from './routes/messages.js';
 import { setupSocket } from './socket/index.js';
 import User from './models/User.js';
 import {
@@ -62,7 +62,7 @@ app.use(globalRateLimit);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/matches', matchRoutes);
-app.use('/api/messages', messageRoutes);
+app.use('/api/messages', createMessageRouter(io));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'DevMatch API is running' });

@@ -7,6 +7,12 @@ import { isBlacklisted, checkSocketEventRate, clearSocketEventRate } from '../mi
 // Map: userId (string) → socketId
 const onlineUsers = new Map();
 
+// Send an event directly to a user by their userId (no room joining required)
+export function emitToUser(io, userId, event, data) {
+  const socketId = onlineUsers.get(String(userId));
+  if (socketId) io.to(socketId).emit(event, data);
+}
+
 // Parse a single cookie value from a Cookie header string
 function parseCookieValue(cookieHeader, name) {
   if (!cookieHeader) return null;
@@ -94,8 +100,15 @@ export const setupSocket = (io) => {
     // ── chat:typing ──────────────────────────────────────────────────────────
     socket.on('chat:typing', async ({ matchId, isTyping }) => {
       try {
-        if (!(await isMatchParticipant(userId, matchId))) return;
-        socket.to(String(matchId)).emit('chat:typing', { userId, isTyping });
+        if (!mongoose.isValidObjectId(matchId)) return;
+        const match = await Match.findById(matchId).select('users').lean();
+        if (!match) return;
+        if (!match.users.some((id) => id.toString() === String(userId))) return;
+        match.users.forEach((participantId) => {
+          if (participantId.toString() !== String(userId)) {
+            emitToUser(io, participantId, 'chat:typing', { userId, isTyping });
+          }
+        });
       } catch { /* ignore */ }
     });
 

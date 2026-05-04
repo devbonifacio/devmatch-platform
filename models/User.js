@@ -1,6 +1,22 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+function isSafeHttpUrl(val) {
+  if (!val) return true;
+  try {
+    const url = new URL(val);
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch { return false; }
+}
+
+function isGithubUrl(val) {
+  if (!val) return true;
+  try {
+    const url = new URL(val);
+    return url.protocol === 'https:' && url.hostname === 'github.com';
+  } catch { return false; }
+}
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -15,16 +31,21 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email format'],
     },
     password: {
       type: String,
       required: [true, 'Password is required'],
-      minlength: [6, 'Password must be at least 6 characters'],
-      select: false, // never return password in queries by default
+      minlength: [8, 'Password must be at least 8 characters'],
+      select: false,
     },
     avatar: {
       type: String,
-      default: '', // URL to profile picture
+      default: '',
+      validate: {
+        validator: isSafeHttpUrl,
+        message: 'Avatar must be a valid HTTP/HTTPS URL',
+      },
     },
     bio: {
       type: String,
@@ -35,8 +56,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+      validate: {
+        validator: isGithubUrl,
+        message: 'GitHub must be a valid https://github.com URL',
+      },
     },
-    // Tech stack — array of strings e.g. ['React', 'Node.js', 'Python']
     stack: {
       type: [String],
       default: [],
@@ -45,37 +69,25 @@ const userSchema = new mongoose.Schema(
         message: 'Stack cannot exceed 20 technologies.',
       },
     },
-    // What kind of projects the dev is looking for
     lookingFor: {
       type: [String],
       enum: ['open-source', 'startup', 'freelance', 'learning', 'hackathon'],
       default: [],
     },
-    // IDs of devs this user has liked
-    liked: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    // IDs of devs this user has skipped
+    liked:   [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     skipped: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    // Online status for chat
-    isOnline: {
-      type: Boolean,
-      default: false,
-    },
-    lastSeen: {
-      type: Date,
-      default: Date.now,
-    },
+    isOnline: { type: Boolean, default: false },
+    lastSeen: { type: Date,    default: Date.now },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
-// Method to compare passwords at login
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };

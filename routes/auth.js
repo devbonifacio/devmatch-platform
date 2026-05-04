@@ -1,34 +1,124 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
 import protect from '../middleware/auth.js';
+import {
+  loginRateLimit,
+  registerRateLimit,
+  addToBlacklist,
+  isBlacklisted,
+  storeRefreshToken,
+  validateRefreshToken,
+  removeRefreshToken,
+} from '../middleware/security.js';
 
 const router = express.Router();
 
-// Helper — generate JWT token
-const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+// ── Cookie settings ────────────────────────────────────────────────────────
+const IS_PROD = process.env.NODE_ENV === 'production';
 
-// POST /api/auth/register
-router.post('/register', async (req, res) => {
+const ACCESS_COOKIE = 'access_token';
+const REFRESH_COOKIE = 'refresh_token';
+
+const ACCESS_TTL_MS  = 15 * 60 * 1000;          // 15 minutes
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function baseCookieOpts() {
+  return {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: IS_PROD ? 'strict' : 'lax',
+  };
+}
+
+function setAuthCookies(res, userId) {
+  const accessToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+  const refreshToken = jwt.sign(
+    { id: userId, type: 'refresh' },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  storeRefreshToken(userId, refreshToken, Date.now() + REFRESH_TTL_MS);
+
+  res.cookie(ACCESS_COOKIE, accessToken, {
+    ...baseCookieOpts(),
+    maxAge: ACCESS_TTL_MS,
+    path: '/',
+  });
+  res.cookie(REFRESH_COOKIE, refreshToken, {
+    ...baseCookieOpts(),
+    maxAge: REFRESH_TTL_MS,
+    path: '/api/auth/refresh',
+  });
+
+  return accessToken;
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie(ACCESS_COOKIE, { ...baseCookieOpts(), path: '/' });
+  res.clearCookie(REFRESH_COOKIE, { ...baseCookieOpts(), path: '/api/auth/refresh' });
+}
+
+// ── Validation rules ───────────────────────────────────────────────────────
+const registerValidation = [
+  body('name')
+    .trim()
+    .notEmpty().withMessage('Name is required.')
+    .isLength({ max: 50 }).withMessage('Name cannot exceed 50 characters.')
+    .matches(/^[\p{L}\s\-'.]+$/u).withMessage('Name contains invalid characters.'),
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required.')
+    .isEmail().withMessage('Invalid email format.')
+    .normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false }),
+  body('password')
+    .notEmpty().withMessage('Password is required.')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters.')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain uppercase, lowercase, and a number.'),
+];
+
+const loginValidation = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required.')
+    .isEmail().withMessage('Invalid email format.')
+    .normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false }),
+  body('password')
+    .notEmpty().withMessage('Password is required.'),
+];
+
+function handleValidation(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ message: errors.array()[0].msg });
+    return false;
+  }
+  return true;
+}
+
+// ── POST /api/auth/register ────────────────────────────────────────────────
+router.post('/register', registerRateLimit, registerValidation, async (req, res) => {
+  if (!handleValidation(req, res)) return;
+
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please fill in all fields.' });
-    }
-
-    // Check if email already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: String(email) });
     if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered.' });
+      return res.status(409).json({ message: 'Email already registered.' });
     }
 
     const user = await User.create({ name, email, password });
-    const token = generateToken(user._id);
+    setAuthCookies(res, user._id);
 
-    res.status(201).json({
-      token,
+    return res.status(201).json({
       user: {
         _id: user._id,
         name: user.name,
@@ -44,21 +134,18 @@ router.post('/register', async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ message: 'Email already registered.' });
     }
-    res.status(500).json({ message: 'Server error during registration.' });
+    return res.status(500).json({ message: 'Server error during registration.' });
   }
 });
 
-// POST /api/auth/login
-router.post('/login', async (req, res) => {
+// ── POST /api/auth/login ───────────────────────────────────────────────────
+router.post('/login', loginRateLimit, loginValidation, async (req, res) => {
+  if (!handleValidation(req, res)) return;
+
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Please provide email and password.' });
-    }
-
-    // Include password field (normally excluded by select: false)
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: String(email) }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
@@ -68,10 +155,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(user._id);
+    setAuthCookies(res, user._id);
 
-    res.json({
-      token,
+    return res.json({
       user: {
         _id: user._id,
         name: user.name,
@@ -84,13 +170,68 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error during login.' });
+    return res.status(500).json({ message: 'Server error during login.' });
   }
 });
 
-// GET /api/auth/me — get current logged-in user
-router.get('/me', protect, async (req, res) => {
+// ── POST /api/auth/logout ─────────────────────────────────────────────────
+router.post('/logout', protect, (req, res) => {
+  // Blacklist the current access token until it expires naturally
+  const token = req.currentToken;
+  if (token) {
+    try {
+      const decoded = jwt.decode(token);
+      if (decoded?.exp) {
+        addToBlacklist(token, decoded.exp * 1000);
+      }
+    } catch (_) { /* ignore decode errors */ }
+  }
+
+  removeRefreshToken(req.user._id);
+  clearAuthCookies(res);
+  return res.json({ message: 'Logged out.' });
+});
+
+// ── POST /api/auth/refresh ────────────────────────────────────────────────
+router.post('/refresh', async (req, res) => {
+  const refreshToken = parseCookieValue(req.headers.cookie, REFRESH_COOKIE);
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'No refresh token.' });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ message: 'Invalid token type.' });
+    }
+
+    if (!validateRefreshToken(decoded.id, refreshToken)) {
+      return res.status(401).json({ message: 'Refresh token invalid or expired.' });
+    }
+
+    // Issue new access token (rotate: also issue new refresh token)
+    setAuthCookies(res, decoded.id);
+    return res.json({ message: 'Token refreshed.' });
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid or expired refresh token.' });
+  }
+});
+
+// ── GET /api/auth/me ──────────────────────────────────────────────────────
+router.get('/me', protect, (req, res) => {
   res.json({ user: req.user });
 });
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function parseCookieValue(cookieHeader, name) {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const [key, ...val] = part.trim().split('=');
+    if (key.trim() === name) return decodeURIComponent(val.join('='));
+  }
+  return null;
+}
 
 export default router;

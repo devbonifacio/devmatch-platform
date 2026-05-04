@@ -7,7 +7,7 @@ import { rateLimitLikes } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
-// POST /api/matches/like/:targetId — dar like com rate limit
+// POST /api/matches/like/:targetId
 router.post('/like/:targetId', protect, rateLimitLikes, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.targetId)) {
     return res.status(400).json({ message: 'Invalid user ID.' });
@@ -20,16 +20,13 @@ router.post('/like/:targetId', protect, rateLimitLikes, async (req, res) => {
       return res.status(400).json({ message: 'Cannot like yourself.' });
     }
 
-    // Impede likes duplicados
     const me = await User.findById(myId).select('liked');
     if (me.liked.some((id) => id.toString() === targetId)) {
-      return res.status(400).json({ message: 'Já deste like a este utilizador.' });
+      return res.status(400).json({ message: 'Already liked this user.' });
     }
 
-    // Regista o like
     await User.findByIdAndUpdate(myId, { $addToSet: { liked: targetId } });
 
-    // Verifica se é match mútuo
     const target = await User.findById(targetId)
       .select('liked name avatar bio stack github')
       .lean();
@@ -52,8 +49,6 @@ router.post('/like/:targetId', protect, rateLimitLikes, async (req, res) => {
             .populate('users', 'name avatar bio stack github isOnline lastSeen');
         } catch (createErr) {
           if (createErr.code === 11000) {
-            // Duplicate key — match was already created (race condition or stale unique index).
-            // Fetch the existing match instead of failing.
             match = await Match.findOne({ users: { $all: sortedIds } })
               .populate('users', 'name avatar bio stack github isOnline lastSeen');
           } else {
@@ -67,12 +62,13 @@ router.post('/like/:targetId', protect, rateLimitLikes, async (req, res) => {
 
     return res.json({ matched: false });
   } catch (error) {
+    // ALTA-7 fixed: never expose error.message to the client
     console.error('Like error:', error);
-    return res.status(500).json({ message: 'Failed to process like.', detail: error.message });
+    return res.status(500).json({ message: 'Failed to process like.' });
   }
 });
 
-// POST /api/matches/skip/:targetId — fazer skip
+// POST /api/matches/skip/:targetId
 router.post('/skip/:targetId', protect, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.targetId)) {
     return res.status(400).json({ message: 'Invalid user ID.' });
@@ -87,14 +83,13 @@ router.post('/skip/:targetId', protect, async (req, res) => {
   }
 });
 
-// GET /api/matches — listar todos os matches do utilizador
+// GET /api/matches
 router.get('/', protect, async (req, res) => {
   try {
     const matches = await Match.find({ users: req.user._id })
       .populate('users', 'name avatar bio stack github isOnline lastSeen')
       .sort({ updatedAt: -1 });
 
-    // Inclui currentUserId para o frontend identificar qual é "o outro"
     const formatted = matches.map((m) => ({
       ...m.toObject(),
       currentUserId: req.user._id.toString(),

@@ -27,6 +27,7 @@ export const useAuthStore = create((set) => ({
       return {
         success: false,
         message: error.response?.data?.message || 'Login failed.',
+        status: error.response?.status,
       };
     }
   },

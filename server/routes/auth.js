@@ -66,12 +66,15 @@ function clearAuthCookies(res) {
 }
 
 // ── Validation rules ───────────────────────────────────────────────────────
+// Allows letters, emoji (including ZWJ sequences and skin-tone modifiers), spaces, hyphens, apostrophes, dots
+const NAME_RE = new RegExp('^[\\p{L}\\p{M}\\p{Extended_Pictographic}\\u200D\\uFE0F\\s\\-\'.]+$', 'u');
+
 const registerValidation = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required.')
     .isLength({ max: 50 }).withMessage('Name cannot exceed 50 characters.')
-    .matches(/^[\p{L}\s\-'.]+$/u).withMessage('Name contains invalid characters.'),
+    .matches(NAME_RE).withMessage('Name contains invalid characters.'),
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required.')

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 
 function isSafeHttpUrl(val) {
   if (!val) return true;
+  if (val.startsWith('data:image/')) return true; // base64 data URI from client canvas
   try {
     const url = new URL(val);
     return ['http:', 'https:'].includes(url.protocol);

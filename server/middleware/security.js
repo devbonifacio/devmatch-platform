@@ -57,9 +57,9 @@ function createIpLimit(max, windowMs, message) {
   };
 }
 
-// 5 attempts / 15 min per IP — blocks brute force on login
+// 3 attempts / 15 min per IP — blocks brute force on login
 export const loginRateLimit = createIpLimit(
-  5, 15 * 60 * 1000,
+  3, 15 * 60 * 1000,
   'Too many login attempts. Try again in 15 minutes.'
 );
 

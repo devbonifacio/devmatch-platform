@@ -102,16 +102,19 @@ export default function Profile() {
     setSaving(true);
     try {
       const payload = {
-        ...form,
+        name: form.name,
         bio: form.bio.slice(0, BIO_MAX),
+        github: form.github,
         stack: form.stack.split(",").map((s) => s.trim()).filter(Boolean),
         lookingFor: form.lookingFor,
+        // avatar is excluded — it has its own dedicated save button above
       };
       const res = await api.put("/users/profile", payload);
       setUser(res.data.user);
       showToast("Perfil atualizado com sucesso!", "success");
-    } catch {
-      showToast("Erro ao atualizar perfil.", "error");
+    } catch (err) {
+      const msg = err.response?.data?.message || "Erro ao atualizar perfil.";
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }

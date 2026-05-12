@@ -7,12 +7,15 @@ import protect from '../middleware/auth.js';
 const router = express.Router();
 
 // ── Validation rules for profile update ───────────────────────────────────
+// Allows letters, emoji (including ZWJ sequences and skin-tone modifiers), spaces, hyphens, apostrophes, dots
+const NAME_RE = new RegExp('^[\\p{L}\\p{M}\\p{Extended_Pictographic}\\u200D\\uFE0F\\s\\-\'.]+$', 'u');
+
 const profileValidation = [
   body('name')
     .optional()
     .trim()
     .isLength({ max: 50 }).withMessage('Name cannot exceed 50 characters.')
-    .matches(/^[\p{L}\s\-'.]+$/u).withMessage('Name contains invalid characters.'),
+    .matches(NAME_RE).withMessage('Name contains invalid characters.'),
   body('bio')
     .optional()
     .trim()
@@ -32,11 +35,12 @@ const profileValidation = [
     .trim()
     .custom((val) => {
       if (!val) return true;
+      if (val.startsWith('data:image/')) return true; // base64 data URI from client canvas
       try {
         const url = new URL(val);
         return ['http:', 'https:'].includes(url.protocol);
       } catch { return false; }
-    }).withMessage('Avatar must be a valid HTTP/HTTPS URL.'),
+    }).withMessage('Avatar must be a valid image URL or data URI.'),
   body('stack')
     .optional()
     .isArray({ max: 20 }).withMessage('Stack cannot exceed 20 items.'),

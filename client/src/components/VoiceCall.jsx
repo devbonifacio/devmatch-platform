@@ -34,6 +34,7 @@ export default function VoiceCall({ socket, matchId, otherUser, currentUser, onC
   // ── Cleanup ──────────────────────────────────────────────────────────
   const cleanup = useCallback(() => {
     clearInterval(durationIntervalRef.current);
+    durationIntervalRef.current = null;
     clearInterval(ringIntervalRef.current);
     ringIntervalRef.current = null;
     if (localStreamRef.current) {
@@ -320,6 +321,14 @@ export default function VoiceCall({ socket, matchId, otherUser, currentUser, onC
     }
 
     return stopRing;
+  }, [callState]);
+
+  // Safety net: ensure mic is always released when returning to idle (e.g., edge-case missed paths)
+  useEffect(() => {
+    if (callState === "idle" && localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
   }, [callState]);
 
   // Cleanup on unmount

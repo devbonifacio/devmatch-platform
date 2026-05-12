@@ -83,6 +83,33 @@ router.post('/skip/:targetId', protect, async (req, res) => {
   }
 });
 
+// DELETE /api/matches/:matchId — remove a match (unmatch)
+router.delete('/:matchId', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.matchId)) {
+    return res.status(400).json({ message: 'Invalid match ID.' });
+  }
+  try {
+    const match = await Match.findById(req.params.matchId);
+    if (!match) return res.status(404).json({ message: 'Match not found.' });
+
+    const uid = req.user._id.toString();
+    if (!match.users.some((id) => id.toString() === uid)) {
+      return res.status(403).json({ message: 'Not authorized.' });
+    }
+
+    const [idA, idB] = match.users.map(String);
+
+    // Remove from liked arrays so they can re-discover each other
+    await User.findByIdAndUpdate(idA, { $pull: { liked: idB } });
+    await User.findByIdAndUpdate(idB, { $pull: { liked: idA } });
+
+    await match.deleteOne();
+    return res.json({ removed: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to remove match.' });
+  }
+});
+
 // GET /api/matches
 router.get('/', protect, async (req, res) => {
   try {

@@ -4,7 +4,7 @@ const SWIPE_THRESHOLD = 100;
 const ROTATION_FACTOR = 0.08;
 const MAX_VISIBLE_STACK = 4;
 
-export default function DevCard({ dev, onLike, onSkip }) {
+export default function DevCard({ dev, onLike, onSkip, onFriendRequest, friendStatus }) {
   const [dragging, setDragging]         = useState(false);
   const [offset, setOffset]             = useState({ x: 0, y: 0 });
   const [exitDir, setExitDir]           = useState(null);
@@ -268,7 +268,7 @@ export default function DevCard({ dev, onLike, onSkip }) {
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button
               onClick={() => !exitDir && triggerSwipe("left")}
               className="group flex flex-1 items-center justify-center gap-2 rounded-xl py-3 font-medium transition-all duration-200 active:scale-95"
@@ -293,6 +293,28 @@ export default function DevCard({ dev, onLike, onSkip }) {
               <XIcon />
               Skip
             </button>
+
+            {onFriendRequest && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); if (!exitDir) onFriendRequest(dev._id); }}
+                disabled={friendStatus === "sent"}
+                className="flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-3 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-60"
+                style={
+                  friendStatus === "sent"
+                    ? { background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", color: "rgba(74,222,128,1)" }
+                    : {
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.09)",
+                        color: "rgba(148,163,184,1)",
+                      }
+                }
+                title={friendStatus === "sent" ? "Pedido enviado" : "Adicionar amigo"}
+              >
+                {friendStatus === "sent" ? <CheckIcon /> : <AddPersonIcon />}
+              </button>
+            )}
+
             <button
               onClick={() => !exitDir && triggerSwipe("right")}
               className="group flex flex-1 items-center justify-center gap-2 rounded-xl py-3 font-medium text-white transition-all duration-200 active:scale-95"
@@ -341,6 +363,20 @@ function XIcon() {
   );
 }
 
+function AddPersonIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6" />
+    </svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
 function GithubIcon() {
   return (
     <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">

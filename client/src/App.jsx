@@ -12,6 +12,9 @@ import Discover from './pages/Discover';
 import Matches from './pages/Matches';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
+import Feed from './pages/Feed';
+import Groups from './pages/Groups';
+import GroupChat from './pages/GroupChat';
 import { useAuthStore } from './store/authStore';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 
@@ -54,10 +57,13 @@ export default function App() {
             <Route path="/login"    element={<Login />} />
             <Route path="/register" element={<Register />} />
 
-            <Route path="/discover"        element={<ProtectedRoute><Discover /></ProtectedRoute>} />
-            <Route path="/matches"         element={<ProtectedRoute><Matches /></ProtectedRoute>} />
-            <Route path="/chat/:matchId"   element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-            <Route path="/profile"         element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/discover"         element={<ProtectedRoute><Discover /></ProtectedRoute>} />
+            <Route path="/matches"          element={<ProtectedRoute><Matches /></ProtectedRoute>} />
+            <Route path="/chat/:matchId"    element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+            <Route path="/profile"          element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/feed"             element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+            <Route path="/groups"           element={<ProtectedRoute><Groups /></ProtectedRoute>} />
+            <Route path="/groups/:groupId"  element={<ProtectedRoute><GroupChat /></ProtectedRoute>} />
           </Routes>
         </AnimatedRoutes>
       </main>

@@ -2,13 +2,21 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { useScramble } from "../hooks/useScramble";
+import { useAuthStore } from "../store/authStore";
 
 export default function Matches() {
-  const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const navigate = useNavigate();
+  const [matches, setMatches]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [toast, setToast]       = useState(null);
+  const { user }  = useAuthStore();
+  const navigate  = useNavigate();
   const headingText = useScramble("Matches", { duration: 900, delay: 80 });
+
+  const showToast = (message, type = "info") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 2500);
+  };
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -37,6 +45,31 @@ export default function Matches() {
     });
   }, [matches, search]);
 
+  const handleRemoveMatch = async (matchId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Remover esta amizade/match?")) return;
+    try {
+      await api.delete(`/matches/${matchId}`);
+      setMatches((prev) => prev.filter((m) => m._id !== matchId));
+      showToast("Match removido.", "info");
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Erro ao remover.", "error");
+    }
+  };
+
+  const handleBlockUser = async (otherId, matchId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Bloquear este utilizador? O match será removido.")) return;
+    try {
+      await api.post(`/users/block/${otherId}`);
+      await api.delete(`/matches/${matchId}`);
+      setMatches((prev) => prev.filter((m) => m._id !== matchId));
+      showToast("Utilizador bloqueado.", "info");
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Erro ao bloquear.", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen px-6 py-10 animate-page-enter">
@@ -55,6 +88,22 @@ export default function Matches() {
   return (
     <div className="min-h-screen px-6 py-10 animate-page-enter">
       <div className="mx-auto max-w-lg">
+        {/* Toast */}
+        <div
+          className="pointer-events-none fixed left-1/2 top-6 z-50 -translate-x-1/2"
+          style={{
+            transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+            opacity: toast ? 1 : 0,
+            transform: toast ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(-16px)",
+          }}
+        >
+          {toast && (
+            <div className="rounded-2xl bg-dark-700 px-5 py-3 text-sm font-semibold text-slate-300 shadow-lg backdrop-blur-sm">
+              {toast.message}
+            </div>
+          )}
+        </div>
+
         <div className="mb-6">
           <h1 className="text-3xl font-bold heading-gradient font-mono">{headingText}</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -92,13 +141,18 @@ export default function Matches() {
           <NoSearchResults query={search} onClear={() => setSearch("")} />
         ) : (
           <div className="space-y-3">
-            {filteredMatches.map((match) => (
-              <MatchCard
-                key={match._id}
-                match={match}
-                onClick={() => navigate(`/chat/${match._id}`)}
-              />
-            ))}
+            {filteredMatches.map((match) => {
+              const other = match.users?.find((u) => u._id !== match.currentUserId) || match.users?.[0];
+              return (
+                <MatchCard
+                  key={match._id}
+                  match={match}
+                  onClick={() => navigate(`/chat/${match._id}`)}
+                  onRemove={(e) => handleRemoveMatch(match._id, e)}
+                  onBlock={(e) => handleBlockUser(other?._id, match._id, e)}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -107,54 +161,84 @@ export default function Matches() {
 }
 
 /* ── Match Card ──────────────────────────────────────────────────────── */
-function MatchCard({ match, onClick }) {
+function MatchCard({ match, onClick, onRemove, onBlock }) {
+  const [showMenu, setShowMenu] = useState(false);
   const other = match.users?.find((u) => u._id !== match.currentUserId) || match.users?.[0];
 
   if (!other) return null;
 
   return (
-    <button
-      onClick={onClick}
-      className="card-interactive group flex w-full items-center gap-4 p-4 text-left"
-    >
-      {/* Avatar */}
-      <div className="relative flex-shrink-0">
-        <img
-          src={other.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${other._id}`}
-          alt={other.name}
-          className={`h-12 w-12 rounded-full object-cover ring-2 transition-all duration-200 ${
-            other.isOnline ? "ring-green-400/40" : "ring-white/[0.06]"
-          }`}
-        />
-        {other.isOnline && (
-          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-dark-800 bg-green-400" style={{ boxShadow: "0 0 6px rgba(74,222,128,0.6)" }} />
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <p className="font-semibold text-white group-hover:text-brand-100 transition-colors">{other.name}</p>
-          {other.isOnline ? (
-            <span className="flex items-center gap-1 text-xs text-green-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-              online
-            </span>
-          ) : null}
+    <div className="card-interactive group relative flex w-full items-center gap-4 p-4">
+      <button
+        className="flex flex-1 items-center gap-4 text-left min-w-0"
+        onClick={onClick}
+      >
+        {/* Avatar */}
+        <div className="relative flex-shrink-0">
+          <img
+            src={other.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${other._id}`}
+            alt={other.name}
+            className={`h-12 w-12 rounded-full object-cover ring-2 transition-all duration-200 ${
+              other.isOnline ? "ring-green-400/40" : "ring-white/[0.06]"
+            }`}
+          />
+          {other.isOnline && (
+            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-dark-800 bg-green-400" style={{ boxShadow: "0 0 6px rgba(74,222,128,0.6)" }} />
+          )}
         </div>
-        {other.stack?.length > 0 && (
-          <p className="mt-0.5 truncate text-xs text-slate-500">
-            {other.stack.slice(0, 4).join(" · ")}
-          </p>
-        )}
-        {other.bio && (
-          <p className="mt-0.5 truncate text-xs text-slate-600">{other.bio}</p>
+
+        {/* Info */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-white group-hover:text-brand-100 transition-colors">{other.name}</p>
+            {other.isOnline && (
+              <span className="flex items-center gap-1 text-xs text-green-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                online
+              </span>
+            )}
+          </div>
+          {other.stack?.length > 0 && (
+            <p className="mt-0.5 truncate text-xs text-slate-500">{other.stack.slice(0, 4).join(" · ")}</p>
+          )}
+          {other.bio && (
+            <p className="mt-0.5 truncate text-xs text-slate-600">{other.bio}</p>
+          )}
+        </div>
+      </button>
+
+      {/* Context menu */}
+      <div className="relative flex-shrink-0">
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowMenu((v) => !v); }}
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400"
+        >
+          <DotsIcon />
+        </button>
+        {showMenu && (
+          <div
+            className="absolute right-0 top-8 z-20 overflow-hidden rounded-xl py-1 shadow-xl"
+            style={{ background: "#13131f", border: "1px solid rgba(255,255,255,0.1)", minWidth: "180px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => { setShowMenu(false); onRemove(e); }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5"
+            >
+              <UnmatchIcon />
+              Remover amizade
+            </button>
+            <button
+              onClick={(e) => { setShowMenu(false); onBlock(e); }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+            >
+              <BlockIcon />
+              Bloquear utilizador
+            </button>
+          </div>
         )}
       </div>
-
-      {/* Chevron */}
-      <ChevronIcon className="flex-shrink-0 text-slate-700 transition-all duration-200 group-hover:text-brand-400 group-hover:translate-x-0.5" />
-    </button>
+    </div>
   );
 }
 
@@ -214,10 +298,27 @@ function XSmallIcon() {
   );
 }
 
-function ChevronIcon({ className = "" }) {
+function DotsIcon() {
   return (
-    <svg className={`h-4 w-4 ${className}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" />
+    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+    </svg>
+  );
+}
+
+function UnmatchIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function BlockIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
     </svg>
   );
 }

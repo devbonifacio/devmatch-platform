@@ -10,6 +10,10 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import matchRoutes from './routes/matches.js';
 import createMessageRouter from './routes/messages.js';
+import postRoutes from './routes/posts.js';
+import groupRoutes from './routes/groups.js';
+import friendRoutes from './routes/friends.js';
+import notificationRoutes from './routes/notifications.js';
 import { setupSocket } from './socket/index.js';
 import User from './models/User.js';
 import {
@@ -60,10 +64,14 @@ app.use(mongoSanitize());
 app.use(globalRateLimit);
 
 // ── Routes ────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/matches', matchRoutes);
-app.use('/api/messages', createMessageRouter(io));
+app.use('/api/auth',          authRoutes);
+app.use('/api/users',         userRoutes);
+app.use('/api/matches',       matchRoutes);
+app.use('/api/messages',      createMessageRouter(io));
+app.use('/api/posts',         postRoutes);
+app.use('/api/groups',        groupRoutes);
+app.use('/api/friends',       friendRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'DevMatch API is running' });
@@ -89,6 +97,8 @@ mongoose
     await Match.syncIndexes();
 
     await User.updateMany({ isOnline: true }, { isOnline: false, lastSeen: new Date() });
+    // Expose io instance for route handlers that need to emit events
+    app.set('io', io);
     setupSocket(io);
 
     const PORT = process.env.PORT || 5000;

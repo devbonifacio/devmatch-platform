@@ -84,16 +84,83 @@ router.put('/profile', protect, profileValidation, async (req, res) => {
   }
 });
 
+// ── GET /api/users/search?q= ───────────────────────────────────────────────
+router.get('/search', protect, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q || q.length < 2) return res.json({ users: [] });
+
+  try {
+    const me = await User.findById(req.user._id).select('blocked').lean();
+    const blockedIds = me.blocked || [];
+
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const users = await User.find({
+      _id: { $ne: req.user._id, $nin: blockedIds },
+      name: regex,
+    })
+      .select('-password -liked -skipped -blocked -friends -friendRequestsSent -friendRequestsReceived')
+      .limit(20)
+      .lean();
+
+    return res.json({ users });
+  } catch (err) {
+    return res.status(500).json({ message: 'Search failed.' });
+  }
+});
+
+// ── POST /api/users/block/:targetId ───────────────────────────────────────
+router.post('/block/:targetId', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.targetId)) {
+    return res.status(400).json({ message: 'Invalid user ID.' });
+  }
+  try {
+    const myId     = req.user._id.toString();
+    const targetId = req.params.targetId;
+
+    if (myId === targetId) return res.status(400).json({ message: 'Cannot block yourself.' });
+
+    await User.findByIdAndUpdate(myId, {
+      $addToSet: { blocked: targetId },
+      $pull:     { friends: targetId, friendRequestsSent: targetId, friendRequestsReceived: targetId },
+    });
+    await User.findByIdAndUpdate(targetId, {
+      $pull: { friends: myId, friendRequestsSent: myId, friendRequestsReceived: myId },
+    });
+
+    return res.json({ blocked: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to block user.' });
+  }
+});
+
+// ── DELETE /api/users/block/:targetId ─────────────────────────────────────
+router.delete('/block/:targetId', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.targetId)) {
+    return res.status(400).json({ message: 'Invalid user ID.' });
+  }
+  try {
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { blocked: req.params.targetId },
+    });
+    return res.json({ unblocked: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to unblock user.' });
+  }
+});
+
 // ── GET /api/users/discover ────────────────────────────────────────────────
 router.get('/discover', protect, async (req, res) => {
   try {
-    // req.user no longer carries liked/skipped (stripped in protect middleware)
-    // Fetch them explicitly for the exclusion query
-    const me = await User.findById(req.user._id).select('liked skipped').lean();
-    const excludeIds = [req.user._id, ...(me.liked || []), ...(me.skipped || [])];
+    const me = await User.findById(req.user._id).select('liked skipped blocked').lean();
+    const excludeIds = [
+      req.user._id,
+      ...(me.liked    || []),
+      ...(me.skipped  || []),
+      ...(me.blocked  || []),
+    ];
 
     const devs = await User.find({ _id: { $nin: excludeIds } })
-      .select('-password -liked -skipped')
+      .select('-password -liked -skipped -blocked -friends -friendRequestsSent -friendRequestsReceived')
       .limit(20);
 
     return res.json({ users: devs });

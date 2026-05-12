@@ -161,17 +161,13 @@ export default function Chat() {
   // ── 3. Send message ───────────────────────────────────────────────────────
   // payload: { text?, image?, audio?, viewOnce? }
   const handleSend = async (payload) => {
-    try {
-      const body = typeof payload === 'string' ? { text: payload } : payload;
-      const res = await api.post(`/messages/${matchId}`, body);
-      const newMessage = { ...res.data.message, isMine: true };
-      setMessages((prev) => {
-        if (prev.some((m) => String(m._id) === String(newMessage._id))) return prev;
-        return [...prev, newMessage];
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
+    const body = typeof payload === 'string' ? { text: payload } : payload;
+    const res = await api.post(`/messages/${matchId}`, body); // throws on error → caller shows toast
+    const newMessage = { ...res.data.message, isMine: true };
+    setMessages((prev) => {
+      if (prev.some((m) => String(m._id) === String(newMessage._id))) return prev;
+      return [...prev, newMessage];
+    });
   };
 
   // Mark a viewOnce image as viewed by the current user

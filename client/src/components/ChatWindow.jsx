@@ -84,6 +84,9 @@ export default function ChatWindow({
   const typingTimer = useRef(null);
   const isTypingRef = useRef(false);
 
+  // Send error toast
+  const [sendError, setSendError] = useState("");
+
   // Image state
   const [imageToSend, setImageToSend] = useState(null); // { dataUrl }
   const [viewOnceMode, setViewOnceMode] = useState(false);
@@ -109,12 +112,18 @@ export default function ChatWindow({
     typingTimer.current = setTimeout(() => { isTypingRef.current = false; onTyping?.(false); }, 1500);
   }, [onTyping]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!text.trim()) return;
-    onSend({ text: text.trim() });
+    const msg = text.trim();
     setText("");
     inputRef.current?.focus();
+    try {
+      await onSend({ text: msg });
+    } catch {
+      showSendError("Erro ao enviar mensagem. Tenta novamente.");
+      setText(msg); // restore text if send failed
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -133,11 +142,22 @@ export default function ChatWindow({
 
   const cancelImage = () => { setImageToSend(null); setViewOnceMode(false); };
 
-  const sendImage = () => {
+  const showSendError = (msg) => {
+    setSendError(msg);
+    setTimeout(() => setSendError(""), 3500);
+  };
+
+  const sendImage = async () => {
     if (!imageToSend) return;
-    onSend({ image: imageToSend.dataUrl, viewOnce: viewOnceMode });
+    const dataUrl = imageToSend.dataUrl;
+    const vo = viewOnceMode;
     setImageToSend(null);
     setViewOnceMode(false);
+    try {
+      await onSend({ image: dataUrl, viewOnce: vo });
+    } catch {
+      showSendError("Erro ao enviar imagem. Tenta novamente.");
+    }
   };
 
   // ── Audio recording ───────────────────────────────────────────────────────────
@@ -198,10 +218,15 @@ export default function ChatWindow({
     clearInterval(recordingTimerRef.current);
   };
 
-  const sendAudio = () => {
+  const sendAudio = async () => {
     if (!audioToSend) return;
-    onSend({ audio: audioToSend.dataUrl });
+    const dataUrl = audioToSend.dataUrl;
     setAudioToSend(null);
+    try {
+      await onSend({ audio: dataUrl });
+    } catch {
+      showSendError("Erro ao enviar áudio. Tenta novamente.");
+    }
   };
 
   // Cleanup on unmount
@@ -217,6 +242,19 @@ export default function ChatWindow({
   return (
     <div className="flex h-full flex-col">
       <ChatHeader user={otherUser} isOnline={isOnline} socket={socket} matchId={matchId} currentUser={currentUser} />
+
+      {/* Send error toast */}
+      {sendError && (
+        <div style={{
+          position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)",
+          zIndex: 9999, background: "rgba(239,68,68,0.95)", color: "#fff",
+          padding: "10px 20px", borderRadius: "50px", fontSize: "13px", fontWeight: 600,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)", pointerEvents: "none",
+          whiteSpace: "nowrap",
+        }}>
+          {sendError}
+        </div>
+      )}
 
       {/* Messages */}
       <div
@@ -290,8 +328,8 @@ export default function ChatWindow({
           <div className="mb-3 flex items-center gap-3 rounded-xl border border-white/10 bg-dark-700 px-3 py-2">
             <AudioPlayer src={audioToSend.dataUrl} isMine={true} compact />
             <div className="flex gap-2 flex-shrink-0">
-              <button onClick={cancelAudio} className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/5">Cancelar</button>
-              <button onClick={sendAudio} className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600">Enviar</button>
+              <button type="button" onClick={cancelAudio} className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/5">Cancelar</button>
+              <button type="button" onClick={sendAudio} className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600">Enviar</button>
             </div>
           </div>
         )}
@@ -302,6 +340,7 @@ export default function ChatWindow({
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
             <span className="flex-1 text-sm font-medium text-red-400">A gravar… {formatDuration(recordingSeconds)}</span>
             <button
+              type="button"
               onClick={stopRecording}
               className="flex items-center gap-1.5 rounded-lg bg-red-500/20 border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/30"
             >
@@ -312,7 +351,7 @@ export default function ChatWindow({
 
         {/* Main input row */}
         {!isRecording && !audioToSend && (
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2">
             {/* Image button */}
             <button
               type="button"
@@ -632,6 +671,7 @@ function ImagePreviewModal({ dataUrl, viewOnce, onToggle, onCancel, onSend }) {
 
         <div style={{ display: "flex", gap: "8px" }}>
           <button
+            type="button"
             onClick={onCancel}
             style={{
               flex: 1, padding: "10px", borderRadius: "12px",
@@ -642,6 +682,7 @@ function ImagePreviewModal({ dataUrl, viewOnce, onToggle, onCancel, onSend }) {
             Cancelar
           </button>
           <button
+            type="button"
             onClick={onSend}
             style={{
               flex: 2, padding: "10px", borderRadius: "12px",
@@ -685,6 +726,7 @@ function Lightbox({ src, onClose }) {
         }}
       />
       <button
+        type="button"
         onClick={onClose}
         style={{
           position: "fixed", top: "16px", right: "16px",

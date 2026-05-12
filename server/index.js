@@ -49,8 +49,9 @@ app.use(cors({
   credentials: true,
 }));
 
-// Payload cap — prevents DoS via oversized JSON bodies
-app.use(express.json({ limit: '10kb' }));
+// Payload cap — base64 images up to ~5 MB, audio up to ~3 MB
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Strip MongoDB operators ($, .) from req.body / req.query / req.params
 app.use(mongoSanitize());

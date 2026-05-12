@@ -97,6 +97,10 @@ export default function ChatWindow({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [audioToSend, setAudioToSend] = useState(null); // { dataUrl }
+
+  // View-once protected overlay
+  const [viewOnceOverlay, setViewOnceOverlay] = useState(null); // { src, messageId }
+  const [screenshotWarning, setScreenshotWarning] = useState(false);
   const mediaRecorderRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const audioStreamRef = useRef(null);
@@ -235,6 +239,20 @@ export default function ChatWindow({
     clearInterval(recordingTimerRef.current);
   }, []);
 
+  // View-once: open protected overlay + immediately mark as viewed
+  const openViewOnce = useCallback((src, messageId) => {
+    setViewOnceOverlay({ src, messageId });
+    onView?.(messageId);
+  }, [onView]);
+
+  const closeViewOnce = useCallback((screenshotDetected = false) => {
+    setViewOnceOverlay(null);
+    if (screenshotDetected) {
+      setScreenshotWarning(true);
+      setTimeout(() => setScreenshotWarning(false), 3500);
+    }
+  }, []);
+
   const grouped = groupMessages(messages);
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -253,6 +271,19 @@ export default function ChatWindow({
           whiteSpace: "nowrap",
         }}>
           {sendError}
+        </div>
+      )}
+
+      {/* Screenshot warning toast */}
+      {screenshotWarning && (
+        <div style={{
+          position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)",
+          zIndex: 10001, background: "rgba(234,88,12,0.97)", color: "#fff",
+          padding: "10px 22px", borderRadius: "50px", fontSize: "13px", fontWeight: 700,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.5)", pointerEvents: "none",
+          whiteSpace: "nowrap", letterSpacing: "0.01em",
+        }}>
+          📵 Screenshot detectado! Imagem ocultada.
         </div>
       )}
 
@@ -285,6 +316,7 @@ export default function ChatWindow({
               otherUser={otherUser}
               onViewOnce={(id) => onView?.(id)}
               onLightbox={setLightboxSrc}
+              onOpenViewOnce={openViewOnce}
             />
           );
         })}
@@ -315,6 +347,12 @@ export default function ChatWindow({
       {/* Lightbox */}
       {lightboxSrc && createPortal(
         <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />,
+        document.body
+      )}
+
+      {/* View-once protected overlay */}
+      {viewOnceOverlay && createPortal(
+        <ViewOnceLightbox src={viewOnceOverlay.src} onClose={closeViewOnce} />,
         document.body
       )}
 
@@ -440,14 +478,24 @@ function ChatHeader({ user, isOnline, socket, matchId, currentUser }) {
 
 // ── MessageBubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ message, otherUser, onViewOnce, onLightbox }) {
+function MessageBubble({ message, otherUser, onViewOnce, onLightbox, onOpenViewOnce }) {
   const { isMine, text, image, audio, viewOnce, viewOnceViewed, createdAt, isFirstInGroup, _id } = message;
   const [localViewed, setLocalViewed] = useState(viewOnceViewed || false);
+
+  // Sync when parent marks the message as viewed (e.g. after overlay closes)
+  useEffect(() => {
+    if (viewOnceViewed) setLocalViewed(true);
+  }, [viewOnceViewed]);
 
   const handleTapViewOnce = () => {
     if (localViewed) return;
     setLocalViewed(true);
-    onViewOnce?.(String(_id));
+    if (image && onOpenViewOnce) {
+      // Open protected overlay; parent calls onView immediately on open
+      onOpenViewOnce(image, String(_id));
+    } else {
+      onViewOnce?.(String(_id));
+    }
   };
 
   const bubbleBase = isMine
@@ -739,6 +787,80 @@ function Lightbox({ src, onClose }) {
       >
         ×
       </button>
+    </div>
+  );
+}
+
+// ── View-once protected lightbox ──────────────────────────────────────────────
+
+function ViewOnceLightbox({ src, onClose }) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === "PrintScreen") {
+        e.preventDefault();
+        onCloseRef.current(true); // screenshot detected
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) onCloseRef.current(false);
+    };
+    const handleBlur = () => onCloseRef.current(false);
+
+    document.addEventListener("keydown", handleKey);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 10000,
+        background: "#000",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        userSelect: "none", WebkitUserSelect: "none",
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        style={{
+          maxWidth: "100%", maxHeight: "90vh",
+          objectFit: "contain",
+          userSelect: "none", WebkitUserSelect: "none",
+          pointerEvents: "none",
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => onClose(false)}
+        style={{
+          position: "fixed", top: "16px", right: "16px",
+          background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)",
+          color: "#fff", borderRadius: "50%", width: "40px", height: "40px",
+          cursor: "pointer", fontSize: "20px",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          backdropFilter: "blur(8px)",
+        }}
+      >×</button>
+      <div style={{
+        position: "fixed", bottom: "32px", left: "50%", transform: "translateX(-50%)",
+        background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)",
+        padding: "8px 20px", borderRadius: "50px", fontSize: "12px",
+        whiteSpace: "nowrap", backdropFilter: "blur(8px)",
+        border: "1px solid rgba(255,255,255,0.1)",
+      }}>
+        🔒 Imagem fecha ao sair desta tela · Screenshots não permitidos
+      </div>
     </div>
   );
 }

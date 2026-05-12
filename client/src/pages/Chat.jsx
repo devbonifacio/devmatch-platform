@@ -159,12 +159,11 @@ export default function Chat() {
   }, [matchId, user]);
 
   // ── 3. Send message ───────────────────────────────────────────────────────
-  const handleSend = async (text) => {
+  // payload: { text?, image?, audio?, viewOnce? }
+  const handleSend = async (payload) => {
     try {
-      const res = await api.post(`/messages/${matchId}`, { text });
-      // Server broadcasts chat:message via socket to all participants after saving.
-      // We add it locally here only as an optimistic update for the sender;
-      // onMessage deduplicates it when the socket event arrives.
+      const body = typeof payload === 'string' ? { text: payload } : payload;
+      const res = await api.post(`/messages/${matchId}`, body);
       const newMessage = { ...res.data.message, isMine: true };
       setMessages((prev) => {
         if (prev.some((m) => String(m._id) === String(newMessage._id))) return prev;
@@ -173,6 +172,18 @@ export default function Chat() {
     } catch (error) {
       console.error('Error sending message:', error);
     }
+  };
+
+  // Mark a viewOnce image as viewed by the current user
+  const handleViewMessage = async (messageId) => {
+    try {
+      await api.post(`/messages/${matchId}/${messageId}/view`);
+      setMessages((prev) =>
+        prev.map((m) =>
+          String(m._id) === String(messageId) ? { ...m, viewOnceViewed: true } : m
+        )
+      );
+    } catch { /* ignore */ }
   };
 
   const handleTyping = (typing) => {
@@ -191,6 +202,7 @@ export default function Chat() {
           messages={messages}
           onSend={handleSend}
           onTyping={handleTyping}
+          onView={handleViewMessage}
           otherUser={otherUser}
           isOnline={isOnline}
           peerTyping={peerTyping}

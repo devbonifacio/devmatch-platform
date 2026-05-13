@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import api from '../lib/api';
 import ChatWindow from '../components/ChatWindow';
 import { useAuthStore } from '../store/authStore';
+import { useUnreadStore } from '../store/unreadStore';
 
 // Connect through the Vite proxy so the httpOnly cookie is sent on the same
 // origin. In production both are served from the same domain.
@@ -22,6 +23,7 @@ export default function Chat() {
   const socketRef = useRef(null);
 
   const user = useAuthStore((state) => state.user);
+  const { clearMatch } = useUnreadStore();
 
   // ── 1. Socket lifecycle — one socket per session ──────────────────────────
   useEffect(() => {
@@ -53,6 +55,8 @@ export default function Chat() {
     setPeerTyping(false);
     setLoadingHistory(true);
     otherUserRef.current = null;
+    // Limpa o badge de não-lidas ao entrar no chat
+    clearMatch(String(matchId));
 
     const fetchMessages = async () => {
       try {

@@ -5,11 +5,12 @@ import { useScramble } from "../hooks/useScramble";
 
 export default function Feed() {
   const { user } = useAuthStore();
-  const [posts, setPosts]           = useState([]);
+  const [posts, setPosts]             = useState([]);
   const [storyGroups, setStoryGroups] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [activeStory, setActiveStory] = useState(null); // { group, index }
+  const [loading, setLoading]         = useState(true);
+  const [showCreate, setShowCreate]   = useState(false);
+  const [activeStory, setActiveStory] = useState(null);
+  const [viewedGroups, setViewedGroups] = useState(new Set());
   const headingText = useScramble("Feed", { duration: 800, delay: 80 });
 
   const fetchFeed = async () => {
@@ -30,13 +31,19 @@ export default function Feed() {
   useEffect(() => { fetchFeed(); }, []);
 
   const handlePostCreated = (newPost) => {
-    setPosts((prev) => [newPost, ...prev]);
+    if (newPost.type === "story") fetchFeed();
+    else setPosts((prev) => [newPost, ...prev]);
     setShowCreate(false);
+  };
+
+  const handleStoryClick = (gi) => {
+    setViewedGroups((prev) => new Set([...prev, storyGroups[gi].author._id]));
+    setActiveStory({ groups: storyGroups, groupIndex: gi, storyIndex: 0 });
   };
 
   const handleLike = async (postId) => {
     try {
-      const res = await api.post(`/posts/${postId}/like`);
+      await api.post(`/posts/${postId}/like`);
       setPosts((prev) => prev.map((p) => {
         if (p._id !== postId) return p;
         const uid = user._id;
@@ -91,28 +98,36 @@ export default function Feed() {
           </button>
         </div>
 
-        {/* Stories bar */}
-        {storyGroups.length > 0 && (
-          <div className="mb-6">
-            <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-              {/* Add your own story */}
+        {/* Stories bar — always shown */}
+        <div
+          className="mb-6 rounded-2xl py-4 px-3"
+          style={{
+            background: "rgba(11,11,20,0.72)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <div
+            className="flex gap-4 overflow-x-auto"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {/* Own story bubble */}
+            <StoryBubble
+              label="Tua story"
+              avatar={user?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${user?._id}`}
+              isOwn
+              onClick={() => setShowCreate(true)}
+            />
+            {storyGroups.map((group, gi) => (
               <StoryBubble
-                label="A tua story"
-                avatar={user?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${user?._id}`}
-                isOwn
-                onClick={() => setShowCreate(true)}
+                key={group.author._id}
+                label={group.author.name}
+                avatar={group.author.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${group.author._id}`}
+                viewed={viewedGroups.has(group.author._id)}
+                onClick={() => handleStoryClick(gi)}
               />
-              {storyGroups.map((group, gi) => (
-                <StoryBubble
-                  key={group.author._id}
-                  label={group.author.name}
-                  avatar={group.author.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${group.author._id}`}
-                  onClick={() => setActiveStory({ groups: storyGroups, groupIndex: gi, storyIndex: 0 })}
-                />
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* Create post modal */}
         {showCreate && (
@@ -159,38 +174,59 @@ export default function Feed() {
   );
 }
 
-/* ── Story Bubble ─────────────────────────────────────────────────────────── */
-function StoryBubble({ label, avatar, isOwn, onClick }) {
+/* ── Story Bubble (Instagram-style) ──────────────────────────────────────── */
+function StoryBubble({ label, avatar, isOwn, viewed, onClick }) {
+  // Instagram gradient: yellow → orange → pink → purple
+  const ringBg = isOwn
+    ? "rgba(255,255,255,0.15)"
+    : viewed
+    ? "rgba(71,85,105,0.5)"
+    : "linear-gradient(45deg,#f9ce34,#ee2a7b,#6228d7)";
+
   return (
     <button
       onClick={onClick}
       className="flex flex-col items-center gap-1.5 flex-shrink-0 group"
+      style={{ minWidth: "70px" }}
     >
-      <div
-        className="relative h-14 w-14 rounded-full p-0.5"
-        style={{
-          background: isOwn
-            ? "rgba(255,255,255,0.1)"
-            : "linear-gradient(135deg, #4f6ef7, #a855f7, #ec4899)",
-        }}
-      >
-        <img
-          src={avatar}
-          alt={label}
-          className="h-full w-full rounded-full object-cover"
-          style={{ border: "2px solid #07070e" }}
-        />
+      <div className="relative">
+        {/* Gradient ring */}
+        <div
+          className="rounded-full"
+          style={{ background: ringBg, padding: "2.5px" }}
+        >
+          {/* Dark gap between ring and avatar */}
+          <div className="rounded-full" style={{ background: "#07070e", padding: "2.5px" }}>
+            <img
+              src={avatar}
+              alt={label}
+              className="h-[58px] w-[58px] rounded-full object-cover block"
+            />
+          </div>
+        </div>
+
+        {/* "+" badge for own story */}
         {isOwn && (
           <span
-            className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full text-white"
-            style={{ background: "linear-gradient(135deg, #4f6ef7, #6366f1)", fontSize: "10px", fontWeight: 900 }}
+            className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white shadow-lg"
+            style={{
+              background: "linear-gradient(135deg,#4f6ef7,#6366f1)",
+              fontSize: "12px",
+              fontWeight: 700,
+              lineHeight: 1,
+              border: "1.5px solid #07070e",
+            }}
           >
             +
           </span>
         )}
       </div>
-      <span className="max-w-[56px] truncate text-center text-xs text-slate-400 group-hover:text-slate-200 transition-colors">
-        {isOwn ? "Tua story" : label}
+
+      <span
+        className="truncate text-center leading-tight text-slate-400 group-hover:text-slate-200 transition-colors"
+        style={{ fontSize: "11px", maxWidth: "70px" }}
+      >
+        {label}
       </span>
     </button>
   );
@@ -208,26 +244,17 @@ function StoryViewer({ groups, initialGroup, initialStory, onClose }) {
 
   const next = () => {
     if (sIdx < currentGroup.stories.length - 1) {
-      setSIdx((i) => i + 1);
-      setProgress(0);
+      setSIdx((i) => i + 1); setProgress(0);
     } else if (gIdx < groups.length - 1) {
-      setGIdx((i) => i + 1);
-      setSIdx(0);
-      setProgress(0);
+      setGIdx((i) => i + 1); setSIdx(0); setProgress(0);
     } else {
       onClose();
     }
   };
 
   const prev = () => {
-    if (sIdx > 0) {
-      setSIdx((i) => i - 1);
-      setProgress(0);
-    } else if (gIdx > 0) {
-      setGIdx((i) => i - 1);
-      setSIdx(0);
-      setProgress(0);
-    }
+    if (sIdx > 0) { setSIdx((i) => i - 1); setProgress(0); }
+    else if (gIdx > 0) { setGIdx((i) => i - 1); setSIdx(0); setProgress(0); }
   };
 
   useEffect(() => {
@@ -245,64 +272,83 @@ function StoryViewer({ groups, initialGroup, initialStory, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+      className="fixed inset-0 z-[100] flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.92)" }}
       onClick={onClose}
     >
       <div
-        className="relative h-[85vh] w-full max-w-sm overflow-hidden rounded-2xl"
+        className="relative overflow-hidden rounded-2xl shadow-2xl"
+        style={{ width: "min(100vw, 400px)", height: "min(90vh, 710px)" }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Background */}
+        <div className="absolute inset-0" style={{ background: "#000" }} />
+
+        {/* Story image / fallback */}
+        {currentStory.image ? (
+          <img src={currentStory.image} alt="story" className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center p-8"
+            style={{ background: "linear-gradient(135deg,#1e1e3a,#2d1b4e)" }}
+          >
+            <p className="text-center text-2xl font-bold text-white">{currentStory.caption}</p>
+          </div>
+        )}
+
+        {/* Top gradient overlay */}
+        <div
+          className="absolute inset-x-0 top-0"
+          style={{ height: "100px", background: "linear-gradient(to bottom, rgba(0,0,0,0.65), transparent)" }}
+        />
+
         {/* Progress bars */}
-        <div className="absolute top-3 left-3 right-3 z-10 flex gap-1">
+        <div className="absolute top-3 left-3 right-3 flex gap-1 z-10">
           {currentGroup.stories.map((_, i) => (
-            <div key={i} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/25">
+            <div key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30">
               <div
-                className="h-full bg-white rounded-full"
-                style={{ width: i < sIdx ? "100%" : i === sIdx ? `${progress}%` : "0%" }}
+                className="h-full rounded-full bg-white"
+                style={{
+                  width: i < sIdx ? "100%" : i === sIdx ? `${progress}%` : "0%",
+                  transition: i === sIdx ? "none" : undefined,
+                }}
               />
             </div>
           ))}
         </div>
 
         {/* Author info */}
-        <div className="absolute top-7 left-3 right-3 z-10 flex items-center gap-2">
+        <div className="absolute top-8 left-3 right-3 z-10 flex items-center gap-2.5">
           <img
             src={currentGroup.author.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${currentGroup.author._id}`}
-            className="h-8 w-8 rounded-full object-cover ring-2 ring-white/30"
+            className="h-9 w-9 rounded-full object-cover ring-2 ring-white/40"
             alt={currentGroup.author.name}
           />
-          <span className="text-sm font-semibold text-white">{currentGroup.author.name}</span>
-          <button onClick={onClose} className="ml-auto text-white/70 hover:text-white">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-white">{currentGroup.author.name}</p>
+            <p className="text-[11px] text-white/60">{formatTime(currentStory.createdAt)}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+          >
             <XIcon />
           </button>
         </div>
 
-        {/* Story image */}
-        {currentStory.image ? (
-          <img
-            src={currentStory.image}
-            alt="story"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div
-            className="flex h-full items-center justify-center p-8"
-            style={{ background: "linear-gradient(135deg, #1e1e3a, #2d1b4e)" }}
-          >
-            <p className="text-center text-2xl font-bold text-white">{currentStory.caption}</p>
-          </div>
-        )}
-
-        {/* Caption */}
+        {/* Caption overlay */}
         {currentStory.caption && currentStory.image && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-5">
+          <div
+            className="absolute bottom-0 left-0 right-0 p-5"
+            style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}
+          >
             <p className="text-sm text-white">{currentStory.caption}</p>
           </div>
         )}
 
         {/* Navigation zones */}
-        <button className="absolute inset-y-0 left-0 w-1/3" onClick={prev} />
-        <button className="absolute inset-y-0 right-0 w-1/3" onClick={next} />
+        <button className="absolute inset-y-0 left-0 w-1/3 z-20" onClick={prev} />
+        <button className="absolute inset-y-0 right-0 w-1/3 z-20" onClick={next} />
       </div>
     </div>
   );
@@ -348,6 +394,7 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
         {isOwnPost && (
           <div className="relative">
             <button
+              type="button"
               onClick={() => setShowMenu((v) => !v)}
               className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
             >
@@ -359,6 +406,7 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
                 style={{ background: "#13131f", border: "1px solid rgba(255,255,255,0.1)", minWidth: "140px" }}
               >
                 <button
+                  type="button"
                   onClick={() => { setShowMenu(false); onDelete(post._id); }}
                   className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
                 >
@@ -371,15 +419,24 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
         )}
       </div>
 
-      {/* Image */}
-      {post.image && (
-        <div className="overflow-hidden" style={{ maxHeight: "500px" }}>
-          <img
-            src={post.image}
-            alt="post"
-            className="w-full object-cover"
-            style={{ maxHeight: "500px" }}
+      {/* Reel video */}
+      {post.video && (
+        <div className="overflow-hidden" style={{ maxHeight: "560px", background: "#000" }}>
+          <video
+            src={post.video}
+            controls
+            loop
+            playsInline
+            className="w-full"
+            style={{ maxHeight: "560px", objectFit: "contain" }}
           />
+        </div>
+      )}
+
+      {/* Image */}
+      {!post.video && post.image && (
+        <div className="overflow-hidden" style={{ maxHeight: "500px" }}>
+          <img src={post.image} alt="post" className="w-full object-cover" style={{ maxHeight: "500px" }} />
         </div>
       )}
 
@@ -393,6 +450,7 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
       {/* Actions */}
       <div className="flex items-center gap-4 px-4 pb-3 pt-1">
         <button
+          type="button"
           onClick={() => onLike(post._id)}
           className={`flex items-center gap-1.5 text-sm font-medium transition-all active:scale-95 ${
             isLiked ? "text-red-400" : "text-slate-500 hover:text-slate-300"
@@ -402,6 +460,7 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
           <span>{post.likes?.length || 0}</span>
         </button>
         <button
+          type="button"
           onClick={() => setShowComments((v) => !v)}
           className="flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-300"
         >
@@ -426,11 +485,9 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
               </div>
             </div>
           ))}
-
           {post.comments?.length === 0 && (
             <p className="text-xs text-slate-600 text-center py-1">Sem comentários ainda.</p>
           )}
-
           <form onSubmit={handleSubmitComment} className="flex gap-2 pt-1">
             <input
               type="text"
@@ -458,12 +515,21 @@ function PostCard({ post, currentUserId, onLike, onDelete, onComment }) {
 
 /* ── Create Post Modal ────────────────────────────────────────────────────── */
 function CreatePostModal({ user, onClose, onCreated }) {
-  const [type, setType]         = useState("post");
-  const [caption, setCaption]   = useState("");
-  const [image, setImage]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
-  const fileRef = useRef(null);
+  const [type, setType]       = useState("post");
+  const [caption, setCaption] = useState("");
+  const [image, setImage]     = useState("");
+  const [video, setVideo]     = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+  const fileRef  = useRef(null);
+  const videoRef = useRef(null);
+
+  const handleTypeChange = (t) => {
+    setType(t);
+    setImage("");
+    setVideo("");
+    setError("");
+  };
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -474,13 +540,32 @@ function CreatePostModal({ user, onClose, onCreated }) {
     reader.readAsDataURL(file);
   };
 
+  const handleVideoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const valid = ["video/mp4", "video/webm", "video/quicktime"];
+    if (!valid.includes(file.type)) { setError("Formato inválido. Usa MP4, WebM ou MOV."); return; }
+    if (file.size > 50 * 1024 * 1024) { setError("Vídeo demasiado grande (máx 50 MB)."); return; }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => setVideo(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!caption.trim() && !image) { setError("Adiciona texto ou imagem."); return; }
+    if (type === "reel") {
+      if (!video) { setError("Adiciona um vídeo para o Reel."); return; }
+    } else {
+      if (!caption.trim() && !image) { setError("Adiciona texto ou imagem."); return; }
+    }
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/posts", { type, caption, image });
+      const body = type === "reel"
+        ? { type, caption, video }
+        : { type, caption, image };
+      const res = await api.post("/posts", body);
       onCreated(res.data.post);
     } catch (err) {
       setError(err?.response?.data?.message || "Erro ao publicar.");
@@ -497,7 +582,7 @@ function CreatePostModal({ user, onClose, onCreated }) {
       >
         <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
           <h2 className="font-semibold text-white">Nova publicação</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
             <XIcon />
           </button>
         </div>
@@ -509,7 +594,7 @@ function CreatePostModal({ user, onClose, onCreated }) {
               <button
                 key={t}
                 type="button"
-                onClick={() => setType(t)}
+                onClick={() => handleTypeChange(t)}
                 className="flex-1 rounded-xl py-2 text-xs font-semibold capitalize transition-all"
                 style={
                   type === t
@@ -532,43 +617,94 @@ function CreatePostModal({ user, onClose, onCreated }) {
             <span className="text-sm font-medium text-slate-300">{user?.name}</span>
           </div>
 
-          {/* Caption */}
+          {/* Caption — optional for reels */}
           <textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            placeholder={type === "story" ? "Escreve a tua story..." : "O que queres partilhar?"}
-            rows={3}
+            placeholder={
+              type === "story" ? "Escreve a tua story..."
+              : type === "reel" ? "Legenda (opcional)..."
+              : "O que queres partilhar?"
+            }
+            rows={type === "reel" ? 2 : 3}
             maxLength={2000}
             className="w-full resize-none rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 outline-none"
             style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
           />
 
-          {/* Image picker */}
-          <div>
-            {image ? (
-              <div className="relative">
-                <img src={image} alt="preview" className="max-h-56 w-full rounded-xl object-cover" />
+          {/* Media picker */}
+          {type === "reel" ? (
+            <div>
+              {video ? (
+                <div className="relative">
+                  <video
+                    src={video}
+                    controls
+                    playsInline
+                    className="max-h-52 w-full rounded-xl object-contain"
+                    style={{ background: "#000" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setVideo("")}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white hover:bg-black/90"
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setImage("")}
-                  className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white hover:bg-black/90"
+                  onClick={() => videoRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-xl py-5 text-sm text-slate-500 transition-colors hover:text-slate-300"
+                  style={{ border: "2px dashed rgba(255,255,255,0.1)" }}
                 >
-                  <XIcon className="h-3 w-3" />
+                  <VideoIcon />
+                  <span>Adicionar vídeo</span>
+                  <span className="text-xs text-slate-600">MP4, WebM, MOV · máx 50 MB</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm text-slate-500 transition-colors hover:text-slate-300"
-                style={{ border: "2px dashed rgba(255,255,255,0.1)" }}
-              >
-                <ImageIcon />
-                Adicionar imagem
-              </button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-          </div>
+              )}
+              <input
+                ref={videoRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                className="hidden"
+                onChange={handleVideoChange}
+              />
+            </div>
+          ) : (
+            <div>
+              {image ? (
+                <div className="relative">
+                  <img src={image} alt="preview" className="max-h-56 w-full rounded-xl object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setImage("")}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white hover:bg-black/90"
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm text-slate-500 transition-colors hover:text-slate-300"
+                  style={{ border: "2px dashed rgba(255,255,255,0.1)" }}
+                >
+                  <ImageIcon />
+                  Adicionar imagem
+                </button>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+            </div>
+          )}
 
           {error && <p className="text-xs text-red-400">{error}</p>}
 
@@ -603,7 +739,7 @@ function EmptyFeed({ onCreatePost }) {
       <p className="mt-2 text-sm text-slate-500">
         Faz match com devs ou adiciona amigos para ver o feed deles.
       </p>
-      <button onClick={onCreatePost} className="btn-primary mt-6 px-6 py-2.5 text-sm">
+      <button type="button" onClick={onCreatePost} className="btn-primary mt-6 px-6 py-2.5 text-sm">
         Criar primeira publicação
       </button>
     </div>
@@ -622,9 +758,7 @@ function SkeletonPost() {
         </div>
       </div>
       <div className="h-52 bg-dark-600" />
-      <div className="p-4">
-        <div className="h-3 w-3/4 rounded bg-dark-600" />
-      </div>
+      <div className="p-4"><div className="h-3 w-3/4 rounded bg-dark-600" /></div>
     </div>
   );
 }
@@ -693,6 +827,13 @@ function ImageIcon() {
     <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1.5" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21" />
+    </svg>
+  );
+}
+function VideoIcon() {
+  return (
+    <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.277A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
     </svg>
   );
 }

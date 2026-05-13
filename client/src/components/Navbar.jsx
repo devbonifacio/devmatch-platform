@@ -1,14 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import { useUnreadStore } from "../store/unreadStore";
 import api from "../lib/api";
 
 const NAV_LINKS = [
-  { to: "/discover", label: "Discover", icon: CompassIcon },
-  { to: "/feed",     label: "Feed",     icon: GridIcon    },
-  { to: "/groups",   label: "Grupos",   icon: GroupsIcon  },
-  { to: "/matches",  label: "Matches",  icon: HeartIcon   },
-  { to: "/profile",  label: "Perfil",   icon: PersonIcon  },
+  { to: "/discover", label: "Discover", icon: CompassIcon, badge: null },
+  { to: "/feed",     label: "Feed",     icon: GridIcon,    badge: null },
+  { to: "/groups",   label: "Grupos",   icon: GroupsIcon,  badge: "groups" },
+  { to: "/matches",  label: "Matches",  icon: HeartIcon,   badge: "matches" },
+  { to: "/profile",  label: "Perfil",   icon: PersonIcon,  badge: null },
 ];
 
 export default function Navbar() {
@@ -20,6 +21,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const notifRef = useRef(null);
+  const { totalMatchUnread, totalGroupUnread } = useUnreadStore();
 
   const handleLogout = () => { logout(); navigate("/login"); };
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
@@ -133,44 +135,59 @@ export default function Navbar() {
 
         {/* Nav links */}
         <nav className="flex items-center gap-0.5 overflow-x-auto">
-          {NAV_LINKS.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`group relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 flex-shrink-0 ${
-                isActive(to) ? "text-white" : "text-slate-500 hover:text-slate-200"
-              }`}
-              style={
-                isActive(to)
-                  ? {
-                      background: "linear-gradient(135deg, rgba(79,110,247,0.18) 0%, rgba(79,110,247,0.07) 100%)",
-                      boxShadow: "inset 0 1px 0 rgba(79,110,247,0.25), 0 0 0 1px rgba(79,110,247,0.2)",
-                    }
-                  : {}
-              }
-              onMouseEnter={(e) => {
-                if (!isActive(to)) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06)";
+          {NAV_LINKS.map(({ to, label, icon: Icon, badge }) => {
+            const badgeCount =
+              badge === "matches" ? totalMatchUnread() :
+              badge === "groups"  ? totalGroupUnread() : 0;
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={`group relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 flex-shrink-0 ${
+                  isActive(to) ? "text-white" : "text-slate-500 hover:text-slate-200"
+                }`}
+                style={
+                  isActive(to)
+                    ? {
+                        background: "linear-gradient(135deg, rgba(79,110,247,0.18) 0%, rgba(79,110,247,0.07) 100%)",
+                        boxShadow: "inset 0 1px 0 rgba(79,110,247,0.25), 0 0 0 1px rgba(79,110,247,0.2)",
+                      }
+                    : {}
                 }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive(to)) {
-                  e.currentTarget.style.background = "";
-                  e.currentTarget.style.boxShadow = "";
-                }
-              }}
-            >
-              <Icon className={`h-4 w-4 transition-colors ${isActive(to) ? "text-brand-400" : "text-slate-600 group-hover:text-slate-400"}`} />
-              <span className="hidden md:inline">{label}</span>
-              {isActive(to) && (
-                <span
-                  className="absolute bottom-0 left-1/2 h-px -translate-x-1/2 rounded-full"
-                  style={{ width: "60%", background: "linear-gradient(90deg, transparent, rgba(79,110,247,0.8), transparent)" }}
-                />
-              )}
-            </Link>
-          ))}
+                onMouseEnter={(e) => {
+                  if (!isActive(to)) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                    e.currentTarget.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.06)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive(to)) {
+                    e.currentTarget.style.background = "";
+                    e.currentTarget.style.boxShadow = "";
+                  }
+                }}
+              >
+                <div className="relative">
+                  <Icon className={`h-4 w-4 transition-colors ${isActive(to) ? "text-brand-400" : "text-slate-600 group-hover:text-slate-400"}`} />
+                  {badgeCount > 0 && (
+                    <span
+                      className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                      style={{ background: "#ef4444" }}
+                    >
+                      {badgeCount > 9 ? "9+" : badgeCount}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden md:inline">{label}</span>
+                {isActive(to) && (
+                  <span
+                    className="absolute bottom-0 left-1/2 h-px -translate-x-1/2 rounded-full"
+                    style={{ width: "60%", background: "linear-gradient(90deg, transparent, rgba(79,110,247,0.8), transparent)" }}
+                  />
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Right area: notifications + user */}

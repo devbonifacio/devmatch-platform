@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import GlobalSocket from './components/GlobalSocket';
 import AuroraBg from './components/AuroraBg';
 import ParticlesBg from './components/ParticlesBg';
 import SpotlightCursor from './components/SpotlightCursor';
@@ -48,6 +49,7 @@ export default function App() {
 
       <OfflineBanner isOnline={isOnline} />
 
+      {user && <GlobalSocket />}
       {user && !isAuthPage && <Navbar />}
 
       <main className="relative z-10 flex flex-1 flex-col min-h-0 overflow-x-hidden overflow-y-auto">

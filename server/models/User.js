@@ -81,6 +81,8 @@ const userSchema = new mongoose.Schema(
     friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     friendRequestsSent:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     friendRequestsReceived: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    gender:       { type: String, enum: ['male', 'female', 'other'], default: 'other' },
+    interestedIn: { type: String, enum: ['male', 'female', 'both'],  default: 'both'  },
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date,    default: Date.now },
   },

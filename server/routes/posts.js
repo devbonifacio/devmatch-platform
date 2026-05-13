@@ -230,6 +230,42 @@ router.delete('/:id/comment/:commentId', protect, async (req, res) => {
   }
 });
 
+// ── POST /api/posts/:id/view ───────────────────────────────────────────────
+router.post('/:id/view', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id))
+    return res.status(400).json({ message: 'Invalid post ID.' });
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Post not found.' });
+    const uid = req.user._id;
+    if (!post.views.some(v => v.toString() === uid.toString())) {
+      post.views.push(uid);
+      await post.save();
+    }
+    return res.json({ ok: true, viewCount: post.views.length });
+  } catch {
+    return res.status(500).json({ message: 'Failed.' });
+  }
+});
+
+// ── GET /api/posts/:id/views — author only ────────────────────────────────
+router.get('/:id/views', protect, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id))
+    return res.status(400).json({ message: 'Invalid post ID.' });
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate('views', 'name avatar')
+      .populate('likes', 'name avatar')
+      .lean();
+    if (!post) return res.status(404).json({ message: 'Post not found.' });
+    if (post.author.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: 'Forbidden.' });
+    return res.json({ views: post.views, likes: post.likes });
+  } catch {
+    return res.status(500).json({ message: 'Failed.' });
+  }
+});
+
 // ── GET /api/posts/user/:userId ────────────────────────────────────────────
 router.get('/user/:userId', protect, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.userId)) {

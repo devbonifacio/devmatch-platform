@@ -58,6 +58,7 @@ export default function Profile() {
 
   const [form, setForm] = useState({
     name: "", bio: "", github: "", avatar: "", stack: "", lookingFor: [],
+    gender: "other", interestedIn: "both",
   });
   const [toast, setToast]           = useState(null);
   const [saving, setSaving]         = useState(false);
@@ -75,12 +76,14 @@ export default function Profile() {
   useEffect(() => {
     if (user) {
       setForm({
-        name:       user.name              || "",
-        bio:        user.bio               || "",
-        github:     user.github            || "",
-        avatar:     user.avatar            || "",
-        stack:      user.stack?.join(", ") || "",
-        lookingFor: user.lookingFor        || [],
+        name:         user.name              || "",
+        bio:          user.bio               || "",
+        github:       user.github            || "",
+        avatar:       user.avatar            || "",
+        stack:        user.stack?.join(", ") || "",
+        lookingFor:   user.lookingFor        || [],
+        gender:       user.gender            || "other",
+        interestedIn: user.interestedIn      || "both",
       });
     }
   }, [user]);
@@ -164,6 +167,8 @@ export default function Profile() {
         github: form.github,
         stack: form.stack.split(",").map((s) => s.trim()).filter(Boolean),
         lookingFor: form.lookingFor,
+        gender: form.gender,
+        interestedIn: form.interestedIn,
       };
       const res = await api.put("/users/profile", payload);
       setUser(res.data.user);
@@ -367,6 +372,28 @@ export default function Profile() {
                   value={form.stack}
                   onChange={(e) => setForm({ ...form, stack: e.target.value })}
                 />
+              </Field>
+
+              <Field label="Género">
+                <div className="flex gap-2 pt-1">
+                  {[["male","Masculino"],["female","Feminino"],["other","Outro"]].map(([val, label]) => (
+                    <button key={val} type="button" onClick={() => setForm({ ...form, gender: val })}
+                      className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${form.gender === val ? "border-brand-500/60 bg-brand-500/20 text-brand-400" : "border-white/10 bg-dark-700 text-slate-500 hover:border-white/20 hover:text-slate-300"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Interessado(a) em">
+                <div className="flex gap-2 pt-1">
+                  {[["male","Homens"],["female","Mulheres"],["both","Todos"]].map(([val, label]) => (
+                    <button key={val} type="button" onClick={() => setForm({ ...form, interestedIn: val })}
+                      className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${form.interestedIn === val ? "border-brand-500/60 bg-brand-500/20 text-brand-400" : "border-white/10 bg-dark-700 text-slate-500 hover:border-white/20 hover:text-slate-300"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </Field>
 
               <Field label="À procura de">

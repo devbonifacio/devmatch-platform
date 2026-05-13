@@ -7,6 +7,43 @@ import { useUnreadStore } from "../store/unreadStore";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "";
 
+function playVoiceJoinSound() {
+  try {
+    const ctx = new AudioContext();
+    const notes = [523.25, 659.25]; // C5 → E5, dois bips ascendentes
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.13);
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.13);
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.13 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + 0.28);
+      osc.start(ctx.currentTime + i * 0.13);
+      osc.stop(ctx.currentTime + i * 0.13 + 0.28);
+    });
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
+}
+
+function playVoiceLeaveSound() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(440, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(310, ctx.currentTime + 0.28);
+    gain.gain.setValueAtTime(0.16, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.32);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.32);
+    setTimeout(() => ctx.close(), 600);
+  } catch {}
+}
+
 export default function GroupChat() {
   const { groupId } = useParams();
   const { user }    = useAuthStore();
@@ -53,12 +90,14 @@ export default function GroupChat() {
       setVoiceParticipants((prev) =>
         prev.find((p) => p.userId === uid) ? prev : [...prev, { userId: uid, name, avatar }]
       );
+      if (uid !== user?._id) playVoiceJoinSound();
       if (localStreamRef.current && uid !== user?._id) createOffer(uid);
     });
 
     socket.on("group:voice-user-left", ({ userId: uid }) => {
       setVoiceParticipants((prev) => prev.filter((p) => p.userId !== uid));
       closePeer(uid);
+      if (uid !== user?._id) playVoiceLeaveSound();
     });
 
     socket.on("group:voice-offer", async ({ from, offer }) => {
@@ -146,6 +185,7 @@ export default function GroupChat() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       setInVoice(true);
+      playVoiceJoinSound();
       socketRef.current?.emit("group:voice-join", { groupId });
     } catch {
       showError("Não foi possível aceder ao microfone.");
@@ -158,6 +198,7 @@ export default function GroupChat() {
     Object.keys(peerConnsRef.current).forEach(closePeer);
     peerConnsRef.current = {};
     socketRef.current?.emit("group:voice-leave", { groupId });
+    playVoiceLeaveSound();
     setInVoice(false);
     setVoiceParticipants([]);
   };

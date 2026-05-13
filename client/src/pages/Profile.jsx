@@ -92,6 +92,14 @@ export default function Profile() {
 
   const openCropModal = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
+    // GIFs: skip crop editor (canvas kills the animation), use directly
+    if (file.type === "image/gif") {
+      if (file.size > 5 * 1024 * 1024) { showToast("GIF demasiado grande (máx 5 MB).", "error"); return; }
+      const reader = new FileReader();
+      reader.onload = (ev) => setForm((f) => ({ ...f, avatar: ev.target.result }));
+      reader.readAsDataURL(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setCropSrc(ev.target.result);
@@ -276,7 +284,7 @@ export default function Profile() {
                   <p className="text-xs font-medium text-brand-400">
                     {isDragging ? "Solta para fazer upload" : "Clica ou arrasta uma imagem"}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-600">JPG, PNG, GIF · recortado com o editor</p>
+                  <p className="mt-0.5 text-xs text-slate-600">JPG, PNG · editor de corte · GIF animado direto</p>
                 </div>
               </div>
 

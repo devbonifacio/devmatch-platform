@@ -57,21 +57,21 @@ function createIpLimit(max, windowMs, message) {
   };
 }
 
-// 3 attempts / 15 min per IP — blocks brute force on login
+// 20 attempts / 15 min per IP
 export const loginRateLimit = createIpLimit(
-  3, 15 * 60 * 1000,
+  20, 15 * 60 * 1000,
   'Too many login attempts. Try again in 15 minutes.'
 );
 
-// 3 registrations / hour per IP — blocks account farming
+// 10 registrations / hour per IP
 export const registerRateLimit = createIpLimit(
-  3, 60 * 60 * 1000,
+  10, 60 * 60 * 1000,
   'Too many registration attempts. Try again later.'
 );
 
-// 100 requests / 15 min per IP — global DoS protection
+// 500 requests / 15 min per IP — global DoS protection
 export const globalRateLimit = createIpLimit(
-  100, 15 * 60 * 1000,
+  500, 15 * 60 * 1000,
   'Too many requests. Please slow down.'
 );
 
